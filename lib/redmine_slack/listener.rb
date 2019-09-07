@@ -1,4 +1,5 @@
 require 'httpclient'
+require 'json'
 
 class SlackListener < Redmine::Hook::Listener
 	def redmine_slack_issues_new_after_save(context={})
@@ -13,6 +14,7 @@ class SlackListener < Redmine::Hook::Listener
 		msg = "[#{escape issue.project}] #{escape issue.author} created <#{object_url issue}|#{escape issue}>#{mentions issue.description}"
 
 		attachment = {}
+		attachment[:mrkdwn] = true
 		attachment[:text] = escape issue.description if issue.description
 		attachment[:fields] = [{
 			:title => I18n.t("field_status"),
@@ -51,6 +53,7 @@ class SlackListener < Redmine::Hook::Listener
 		msg = "[#{escape issue.project}] #{escape journal.user.to_s} updated <#{object_url issue}|#{escape issue}>#{mentions journal.notes}"
 
 		attachment = {}
+		attachment[:mrkdwn] = true
 		attachment[:text] = escape journal.notes if journal.notes
 		attachment[:fields] = journal.details.map { |d| detail_to_field d }
 
@@ -98,6 +101,7 @@ class SlackListener < Redmine::Hook::Listener
 		end
 
 		attachment = {}
+		attachment[:mrkdwn] = true
 		attachment[:text] = ll(Setting.default_language, :text_status_changed_by_changeset, "<#{revision_url}|#{escape changeset.comments}>")
 		attachment[:fields] = journal.details.map { |d| detail_to_field d }
 
@@ -136,6 +140,7 @@ class SlackListener < Redmine::Hook::Listener
 		icon = Setting.plugin_redmine_slack['icon']
 
 		params = {
+			:mrkdwn => true,
 			:text => msg,
 			:link_names => 1,
 		}
@@ -274,21 +279,43 @@ private
 		result = { :title => title, :value => value }
 		result[:short] = true if short
 		result
-	end
-
-	def mentions text
-		return nil if text.nil?
-		names = extract_usernames text
-		names.present? ? "\nTo: " + names.join(', ') : nil
-	end
+  end
+  
+  def mentions text
+    return nil if text.nil?
+  
+    # Get name
+    names = extract_usernames text
+    if names.length <= 0
+      return nil
+    end 
+  
+    # Get user data mapper
+    userMapper = Setting.plugin_redmine_slack['userid_mapper']
+    userData = JSON.parse(userMapper) rescue nil
+    if userData.nil?
+      return nil
+    end
+  
+    # FInd user ids
+    userIds = Array.new
+    for name in names
+      userId = userData[name]
+      unless userId.nil? || userId == 0
+        userIds.push("<@" + userId + ">")
+      end
+    end 
+  
+    return userIds.present? ? "\n To: " + userIds.join(", ") : nil
+  end
 
 	def extract_usernames text = ''
-		if text.nil?
-			text = ''
-		end
-
-		# slack usernames may only contain lowercase letters, numbers,
-		# dashes and underscores and must start with a letter or number.
-		text.scan(/@[a-z0-9][a-z0-9_\-]*/).uniq
-	end
+    if text.nil?
+      text = ''
+    end
+  
+    # slack usernames may only contain lowercase letters, numbers,
+    # dashes and underscores and must start with a letter or number.
+    text.scan(/@[a-zA-Z0-9][a-zA-Z0-9_\-]*/).uniq
+  end
 end
