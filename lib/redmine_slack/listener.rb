@@ -10,6 +10,9 @@ class SlackListener < Redmine::Hook::Listener
 
 		return unless channel and url
 		return if issue.is_private?
+  
+		names = extract_usernames issue.description
+		return if names.length <= 0
 
 		msg = "[#{escape issue.project}] #{escape issue.author} created <#{object_url issue}|#{escape issue}>#{mentions issue.description}"
 
@@ -49,6 +52,9 @@ class SlackListener < Redmine::Hook::Listener
 		return unless channel and url and Setting.plugin_redmine_slack['post_updates'] == '1'
 		return if issue.is_private?
 		return if journal.private_notes?
+  
+		names = extract_usernames journal.notes
+		return if names.length <= 0
 
 		msg = "[#{escape issue.project}] #{escape journal.user.to_s} updated <#{object_url issue}|#{escape issue}>#{mentions journal.notes}"
 
